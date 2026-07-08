@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+<meta charset="UTF-8">
+<title>Appskrifter – importformat for språkmodeller</title>
+</head>
+<body>
+<h1>Appskrifter – importformat for oppskrifter</h1>
+
+<p>
+Denne siden er ment for en språkmodell (KI-assistent), ikke for et menneske. Du har fått
+en lenke til en oppskrift (en nettside eller et bilde) i tillegg til denne siden. Oppgaven
+din er å lese oppskriften og svare med <strong>kun ett JSON-objekt</strong> som følger
+formatet under — ingen forklarende tekst før eller etter, ingen markdown-kodeblokk rundt.
+Resultatet limes rett inn i en app.
+</p>
+
+<h2>JSON-format</h2>
+
+<pre>
+{
+  "name": "Navnet på retten",
+  "type": "middag | dessert | bakst | frokost",
+  "recipeUnit": "person | porsjon",
+  "yieldNote": "Valgfri fritekst, kun relevant når recipeUnit er porsjon",
+  "prepTimeMinutes": 30,
+  "instructions": "Fremgangsmåte som fri tekst. Bruk linjeskift mellom steg.",
+  "ingredients": [
+    {
+      "name": "Ingrediensnavn",
+      "category": "fruktOgGront | kjott | meieri | torrvarerOgSauser | annet",
+      "quantity": 4,
+      "unit": "stk | g | kg | ml | dl | l | ss | ts | boks | pose | pakke | bunt | fedd | klype"
+    }
+  ]
+}
+</pre>
+
+<h2>Viktige regler</h2>
+
+<ul>
+<li>
+  <strong>recipeUnit avgjør hva "quantity" betyr.</strong> Bruk <code>"person"</code> for
+  vanlige middager/desserter/frokoster — da er hver "quantity" mengden <em>per person</em>
+  (f.eks. hvis oppskriften er for 4 personer og bruker 800 g kjøttdeig, skal quantity være
+  200, ikke 800). Bruk <code>"porsjon"</code> for bakst (brød, boller, kaker, kjeks) som er
+  oppgitt som én hel omgang uansett antall personer — da er "quantity" mengden for
+  <em>hele oppskriften slik den er skrevet</em>, ikke delt på noe. Sett i så fall gjerne
+  "yieldNote" til hva én omgang faktisk gir, f.eks. "Gir 6 fondanter" eller "ca. 18 kjeks".
+</li>
+<li>
+  <strong>category</strong> må være nøyaktig én av de fem verdiene i listen over — bruk
+  ingredienslisten under til å finne riktig kategori og eksakt skrivemåte for ingredienser
+  som allerede finnes, slik at appen gjenbruker dem i stedet for å lage nye med et lett
+  annerledes navn. For ingredienser som ikke finnes i listen: velg selv den kategorien som
+  passer best.
+</li>
+<li><strong>unit</strong> må være nøyaktig én av verdiene i listen over (norske forkortelser).</li>
+<li><strong>type</strong> og <strong>recipeUnit</strong> må også være nøyaktig som skrevet over (ikke norske visningsnavn).</li>
+<li>Hvis prep-/steketid ikke er eksplisitt oppgitt, gjør et fornuftig anslag i minutter.</li>
+<li>Ta gjerne med hele fremgangsmåten, ikke bare et sammendrag.</li>
+</ul>
+
+<h2>Eksisterende ingrediensliste</h2>
+
+<p>
+Match ingrediensnavn mot denne listen når det finnes en klar treff, slik at appen
+gjenbruker eksisterende ingredienser i stedet for å lage duplikater med litt ulikt navn
+(f.eks. "Hvetemel" vs. "Mel"). Denne listen kan være noe foreldet dersom det er lagt til
+ingredienser i appen etter at denne siden sist ble oppdatert — det er ikke kritisk om en
+sjelden ingrediens mangler her.
+</p>
+
+<!-- INGREDIENT_LIST_START -->
+<pre>[
+  {
+    "name": "Agurk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Avokado",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Bacon",
+    "category": "kjott"
+  },
+  {
+    "name": "Bakepulver",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Brunt sukker",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Byggryn",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Chilipulver",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Creme Fraishe",
+    "category": "meieri"
+  },
+  {
+    "name": "Eddik",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Egg",
+    "category": "meieri"
+  },
+  {
+    "name": "Eple",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Fetaost",
+    "category": "meieri"
+  },
+  {
+    "name": "Flaksalt",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Fløte",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Granateple",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Gulrot",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Hasselnøtter",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Havregryn",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Hermetiske tomater",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Honning",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Hvetemel",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Hvitløk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Hvitløkspulver",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Hvitost",
+    "category": "meieri"
+  },
+  {
+    "name": "Isbergsalat",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Italiensk krydder",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Jordbær eller bringebær",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Kikerter",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Kjøttdeig",
+    "category": "kjott"
+  },
+  {
+    "name": "Kokesjokolade",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Koriander",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Kyllingfilet",
+    "category": "kjott"
+  },
+  {
+    "name": "Kyllingkraft",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Laksefilet",
+    "category": "kjott"
+  },
+  {
+    "name": "Lasagneplater",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Lefse",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Lime",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Linfrø",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Lys sirup",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Løk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Mais",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Mandler",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Mango",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Mango chutney",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Mango-papayasalsa",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Melis",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Melk",
+    "category": "meieri"
+  },
+  {
+    "name": "Mørk sjokolade",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Mørk sjokolade 70%",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Natron",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Olivenolje",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Papaya",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Paprika",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Paprikapulver",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Pastinakk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Pepper",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Pinjekjerner",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Potet",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Quinoa",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Revet parmesan",
+    "category": "meieri"
+  },
+  {
+    "name": "Ricotta",
+    "category": "meieri"
+  },
+  {
+    "name": "Ris",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Rødløk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Salatkylling",
+    "category": "kjott"
+  },
+  {
+    "name": "Salsa",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Salt",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Sammalt spelt",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Siktet speltmel",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Sitron",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Sitronsaft",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Smør",
+    "category": "meieri"
+  },
+  {
+    "name": "Solsikkefrø",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Soltørkede tomater",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Sopp",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Soyasaus",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Spaghetti",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Spinat",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Spisskummen",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Squash",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Sukker",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Svarte bønner",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Søtpotet",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Taco-krydder",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Tahini",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Tomat",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Tomatpuré",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Torskefilet",
+    "category": "kjott"
+  },
+  {
+    "name": "Tortilla",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Tørkede tranebær",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Tørrgjær",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Valnøtter",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Vaniljeekstrakt",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Vaniljesukker",
+    "category": "torrvarerOgSauser"
+  },
+  {
+    "name": "Vårløk",
+    "category": "fruktOgGront"
+  },
+  {
+    "name": "Yoghurt naturell",
+    "category": "meieri"
+  }
+]</pre>
+<!-- INGREDIENT_LIST_END -->
+
+</body>
+</html>

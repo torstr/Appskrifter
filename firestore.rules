@@ -1,0 +1,271 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userData() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : {};
+    }
+
+    function myHouseholdId() {
+      return userData().get('householdId', null);
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userData().get('isAdmin', false) == true;
+    }
+
+    function isSameHousehold(householdId) {
+      return isSignedIn() && householdId != null && myHouseholdId() == householdId;
+    }
+
+    // Medlemskap er en egen underkolleksjon (households/{id}/members/{uid}) i
+    // stedet for et array-felt, slik at "bli med"-flyten kan verifiseres trygt
+    // av reglene under uten en Cloud Function: se households/members lenger ned.
+    function isHouseholdMember(householdId) {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/households/$(householdId)/members/$(request.auth.uid));
+    }
+
+    // Profil lesbar for: seg selv, medlemmer i samme husholdning, eller
+    // husholdningens oppretter som skal godkjenne en ventende forespørsel.
+    // Firestore evaluerer alle OR-grener (ingen short-circuit), så egen-lesing
+    // må være et eget allow-read — ellers feiler myHouseholdId() når profilen
+    // ikke finnes ennå (f.eks. rett etter første innlogging).
+    function canReadOtherUserProfile(targetUid) {
+      return isSignedIn()
+        && request.auth.uid != targetUid
+        && myHouseholdId() != null
+        && exists(/databases/$(database)/documents/users/$(targetUid))
+        && get(/databases/$(database)/documents/users/$(targetUid)).data.householdId == myHouseholdId()
+        && exists(/databases/$(database)/documents/households/$(myHouseholdId())/members/$(targetUid));
+    }
+
+    function canReadPendingJoinerProfile(targetUid) {
+      return isSignedIn()
+        && request.auth.uid != targetUid
+        && myHouseholdId() != null
+        && get(/databases/$(database)/documents/households/$(myHouseholdId())).data.createdBy == request.auth.uid
+        && exists(/databases/$(database)/documents/households/$(myHouseholdId())/joinRequests/$(targetUid));
+    }
+
+    function isHouseholdCreator(householdId) {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid;
+    }
+
+    // --- users ---
+    // Admin-status kan aldri settes av klienten selv (må gjøres manuelt i
+    // Firebase-konsollet). householdId kan kun settes til en husholdning der
+    // et medlemskapsdokument allerede finnes for brukeren (se households/members),
+    // og kan kun nullstilles igjen (forlate) etter at medlemskapsdokumentet i
+    // den gamle husholdningen faktisk er fjernet.
+    match /users/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow read: if canReadOtherUserProfile(uid);
+      allow read: if canReadPendingJoinerProfile(uid);
+      allow create: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.isAdmin == false
+        && request.resource.data.householdId == null;
+      allow update: if isSignedIn() && request.auth.uid == uid
+        && request.resource.data.isAdmin == resource.data.isAdmin
+        && (
+          request.resource.data.householdId == resource.data.householdId
+          || (
+            // Bli med: godkjent (medlemskapsdokument finnes allerede).
+            resource.data.householdId == null
+            && exists(/databases/$(database)/documents/households/$(request.resource.data.householdId)/members/$(uid))
+          )
+          || (
+            // Forlate: medlemskapsdokumentet i den gamle husholdningen er
+            // allerede slettet.
+            request.resource.data.householdId == null
+            && resource.data.householdId != null
+            && !exists(/databases/$(database)/documents/households/$(resource.data.householdId)/members/$(uid))
+          )
+        );
+      allow delete: if false;
+    }
+
+    // --- households ---
+    // Hvem som helst innlogget kan opprette en ny husholdning (de blir eier).
+    // Kun standard antall personer og invitasjonskode kan endres i etterkant,
+    // og kun av eksisterende medlemmer.
+    match /households/{householdId} {
+      allow read: if isHouseholdMember(householdId) || isHouseholdCreator(householdId);
+      allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isHouseholdMember(householdId)
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['defaultServings', 'inviteCode', 'hiddenRecipeTypes']);
+      allow delete: if false;
+
+      // Medlemskap opprettes enten av husholdningens oppretter (rett etter at
+      // husholdningen ble laget), eller av husholdningens oppretter som
+      // godkjenner en ventende forespørsel (se joinRequests under) — å bli
+      // med krever alltid oppretterens godkjenning, ikke bare en gyldig kode.
+      // Et medlem kan når som helst slette sitt eget medlemskap for å forlate.
+      match /members/{uid} {
+        // isHouseholdMember() krever at ens eget medlemskapsdokument allerede
+        // finnes, så den alene ville gjort det umulig å strømme sitt EGET
+        // (ennå ikke opprettede) medlemskap mens man venter på godkjenning —
+        // read ville blitt avslått med permission-denied helt fram til man
+        // allerede var medlem. Man kan derfor alltid lese sin egen
+        // medlemskapsstatus (finnes eller ikke), i tillegg til at eksisterende
+        // medlemmer kan lese hverandres (for medlemslisten).
+        // Collection-group-spørring (findMembershipHouseholdId) filtrerer på
+        // memberUid/uid-felt, ikke dokument-id — read-regelen må tillate begge.
+        allow read: if isSignedIn() && (
+          request.auth.uid == uid
+          || isHouseholdMember(householdId)
+          || resource.data.memberUid == request.auth.uid
+          || resource.data.uid == request.auth.uid
+        );
+        allow create: if isSignedIn() && (
+          (request.auth.uid == uid && get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid)
+          || (
+            get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
+            && exists(/databases/$(database)/documents/households/$(householdId)/joinRequests/$(uid))
+          )
+        )
+        && (
+          request.resource.data.memberUid == uid
+          || request.resource.data.uid == uid
+        );
+        allow update: if false;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+
+      // En forespørsel om å bli med beviser at man kjenner en gyldig
+      // invitasjonskode (samme oppslag mot /inviteCodes som tidligere), men
+      // gir ikke medlemskap før husholdningens oppretter godkjenner den (se
+      // members over) eller avviser den (sletter forespørselen).
+      match /joinRequests/{uid} {
+        allow read: if isSignedIn() && (
+          request.auth.uid == uid
+          || get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
+        );
+        allow create: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.joinCode is string
+          && get(/databases/$(database)/documents/inviteCodes/$(request.resource.data.joinCode)).data.householdId == householdId;
+        allow update: if false;
+        allow delete: if isSignedIn() && (
+          request.auth.uid == uid
+          || get(/databases/$(database)/documents/households/$(householdId)).data.createdBy == request.auth.uid
+        );
+      }
+
+      match /mealPlanItems/{itemId} {
+        allow read, write: if isHouseholdMember(householdId);
+      }
+
+      match /shoppingListItems/{itemId} {
+        allow read, write: if isHouseholdMember(householdId);
+      }
+
+      match /manualItemHistory/{itemId} {
+        allow read, write: if isHouseholdMember(householdId);
+      }
+    }
+
+    // --- inviteCodes ---
+    // Ren oppslagstabell fra kode -> husholdnings-id. Dokument-id-en ER selve
+    // koden. get er åpent for alle innloggede (punkt-oppslag med kjent kode).
+    // list er kun for oppretteren, og kun for koder til egen husholdning
+    // (spørringen må bruke where('householdId', '==', egen id)).
+    match /inviteCodes/{code} {
+      allow get: if isSignedIn();
+      allow list: if myHouseholdId() != null
+        && isHouseholdCreator(myHouseholdId())
+        && resource.data.householdId == myHouseholdId();
+      allow create: if isSignedIn()
+        && isHouseholdCreator(request.resource.data.householdId);
+      allow delete: if isSignedIn()
+        && isHouseholdCreator(resource.data.householdId);
+      allow update: if false;
+    }
+
+    // --- ingredients (sentral, delt liste) ---
+    match /ingredients/{ingredientId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // --- recipes ---
+    match /recipes/{recipeId} {
+      allow read: if isSignedIn() && (
+        resource.data.status == 'approved'
+        || resource.data.createdByUid == request.auth.uid
+        || isSameHousehold(resource.data.ownerHouseholdId)
+        || isAdmin()
+      );
+
+      allow create: if isSignedIn()
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.status == 'private'
+        && request.resource.data.ownerHouseholdId == myHouseholdId()
+        && request.resource.data.ownerHouseholdId != null;
+
+      allow update: if isSignedIn() && (
+        // Eier-husholdningen redigerer sin egen private/foreslåtte oppskrift,
+        // eller foreslår den til det globale settet (private -> pending).
+        (
+          isSameHousehold(resource.data.ownerHouseholdId)
+          && resource.data.status != 'approved'
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && request.resource.data.ownerHouseholdId == resource.data.ownerHouseholdId
+          && request.resource.data.status in ['private', 'pending']
+        )
+        ||
+        // Admin godkjenner (pending -> approved, blir eierløs/global) eller
+        // avviser (pending -> private, tilbake til husholdningen) et forslag.
+        (
+          isAdmin()
+          && resource.data.status == 'pending'
+          && request.resource.data.createdByUid == resource.data.createdByUid
+          && (
+            (request.resource.data.status == 'approved' && request.resource.data.ownerHouseholdId == null)
+            || (request.resource.data.status == 'private' && request.resource.data.ownerHouseholdId == resource.data.ownerHouseholdId)
+          )
+        )
+        ||
+        // Admin redigerer innholdet i en allerede godkjent, global oppskrift
+        // (f.eks. retter en skrivefeil eller justerer ingredienser).
+        (
+          isAdmin()
+          && resource.data.status == 'approved'
+          && request.resource.data.status == 'approved'
+          && request.resource.data.ownerHouseholdId == null
+          && request.resource.data.createdByUid == resource.data.createdByUid
+        )
+      );
+
+      // Eier-husholdningen kan slette sine egne oppskrifter så lenge de ikke
+      // er godkjent/globale ennå — både private og de som venter på
+      // godkjenning (f.eks. for å trekke tilbake et forslag).
+      allow delete: if isSameHousehold(resource.data.ownerHouseholdId) && resource.data.status != 'approved';
+
+      // Egen rating. Kun eieren kan lese/skrive sin egen enkeltvurdering.
+      match /ratings/{uid} {
+        allow read, delete: if isSignedIn() && (
+          request.auth.uid == uid
+          || resource.data.raterUid == request.auth.uid
+          || resource.data.uid == request.auth.uid
+        );
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.stars is int
+          && request.resource.data.stars >= 1 && request.resource.data.stars <= 5
+          && (
+            request.resource.data.raterUid == request.auth.uid
+            || request.resource.data.uid == request.auth.uid
+          );
+      }
+    }
+  }
+}

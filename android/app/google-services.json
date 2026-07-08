@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "467765014512",
+    "project_id": "appskrifter",
+    "storage_bucket": "appskrifter.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:467765014512:android:704b8e2f2ab3ca2f487735",
+        "android_client_info": {
+          "package_name": "no.appskrifter.appskrifter"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "467765014512-iaph097c69d8eljed547c11pm46373t2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "no.appskrifter.appskrifter",
+            "certificate_hash": "9ffee0ab57490f4e6ee4df89b3e8eb33d5ca687b"
+          }
+        },
+        {
+          "client_id": "467765014512-64r3avavso1mc610anjej457742klkcb.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdjqSkS2qGdpQOPAzoyJ3v0o97RG8ldc0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "467765014512-64r3avavso1mc610anjej457742klkcb.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
