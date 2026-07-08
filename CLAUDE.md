@@ -57,7 +57,10 @@ sortert etter varekategori.
 - **Filtrering og søk**: oppskriftslistene (alle tre faner) har et søkefelt (matcher navn) og kan
   filtreres på type (middag/dessert/bakst/frokost, ELLER), ingrediens (velg flere, ELLER-logikk —
   «laks eller gulrot»), minimum egen vurdering og maks tilberedningstid. Rent klientsidig filtrering av
-  de allerede strømmede listene, se `RecipeFilter` og `recipe_filter_sheet.dart`.
+  de allerede strømmede listene, se `RecipeFilter` og `recipe_filter_sheet.dart`. Filteret
+  rapporteres fortløpende til skjermen bak arket etter hver endring (ikke bare når «Bruk
+  filter» trykkes) — et tap utenfor arket gir dermed samme resultat som å trykke «Bruk filter»,
+  i stedet for å forkaste endringene.
 - **Type + skjul som standard**: hver oppskrift har en `type` (middag/dessert/bakst/frokost,
   standard middag for eldre oppskrifter uten feltet). En husholdning kan i Innstillinger velge å
   skjule bestemte typer som standard i oppskriftslistene (`households.hiddenRecipeTypes`) — nyttig

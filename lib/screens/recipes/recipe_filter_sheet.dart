@@ -10,20 +10,27 @@ import '../../widgets/star_rating.dart';
 const _prepTimeOptions = [15, 30, 45, 60, 90];
 
 /// Bunnark for å velge filter på oppskriftslistene: ingredienser (ELLER),
-/// minimums-rating og maks tilberedningstid. Returnerer det nye filteret via
-/// Navigator.pop, eller null hvis brukeren bare lukket arket uten å endre.
-Future<RecipeFilter?> showRecipeFilterSheet(BuildContext context, RecipeFilter current) {
-  return showModalBottomSheet<RecipeFilter>(
+/// minimums-rating og maks tilberedningstid. Filteret rapporteres fortløpende
+/// via [onChanged] mens brukeren justerer det, ikke bare når «Bruk filter»
+/// trykkes — slik får et tap utenfor arket (vanlig dismiss) samme effekt som
+/// å trykke «Bruk filter», i stedet for å forkaste endringene.
+Future<void> showRecipeFilterSheet(
+  BuildContext context,
+  RecipeFilter current, {
+  required ValueChanged<RecipeFilter> onChanged,
+}) {
+  return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
-    builder: (_) => _RecipeFilterSheet(initial: current),
+    builder: (_) => _RecipeFilterSheet(initial: current, onChanged: onChanged),
   );
 }
 
 class _RecipeFilterSheet extends ConsumerStatefulWidget {
-  const _RecipeFilterSheet({required this.initial});
+  const _RecipeFilterSheet({required this.initial, required this.onChanged});
 
   final RecipeFilter initial;
+  final ValueChanged<RecipeFilter> onChanged;
 
   @override
   ConsumerState<_RecipeFilterSheet> createState() => _RecipeFilterSheetState();
@@ -42,17 +49,25 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
     super.dispose();
   }
 
-  void _apply() {
-    Navigator.of(context).pop(RecipeFilter(
-      ingredientIds: _ingredientIds,
-      minRating: _minRating,
-      maxPrepMinutes: _maxPrepMinutes,
-      types: _types,
-    ));
+  RecipeFilter get _currentFilter => RecipeFilter(
+        ingredientIds: _ingredientIds,
+        minRating: _minRating,
+        maxPrepMinutes: _maxPrepMinutes,
+        types: _types,
+      );
+
+  /// Kjør etter enhver endring av filtertilstanden: oppdaterer skjermen bak
+  /// arket med det samme, slik at enhver måte å lukke arket på (knapp,
+  /// tap utenfor, tilbake-knapp) etterlater riktig filter.
+  void _setAndReport(VoidCallback update) {
+    setState(update);
+    widget.onChanged(_currentFilter);
   }
 
+  void _apply() => Navigator.of(context).pop();
+
   void _reset() {
-    setState(() {
+    _setAndReport(() {
       _ingredientIds = {};
       _minRating = 0;
       _maxPrepMinutes = null;
@@ -99,7 +114,7 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
                   FilterChip(
                     label: Text(type.displayName),
                     selected: _types.contains(type),
-                    onSelected: (selected) => setState(() {
+                    onSelected: (selected) => _setAndReport(() {
                       if (selected) {
                         _types.add(type);
                       } else {
@@ -120,7 +135,7 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
                   for (final ing in selected)
                     Chip(
                       label: Text(ing.name),
-                      onDeleted: () => setState(() => _ingredientIds.remove(ing.id)),
+                      onDeleted: () => _setAndReport(() => _ingredientIds.remove(ing.id)),
                     ),
                 ],
               ),
@@ -142,7 +157,7 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
                 for (final ing in unselectedMatches)
                   ActionChip(
                     label: Text(ing.name),
-                    onPressed: () => setState(() => _ingredientIds.add(ing.id)),
+                    onPressed: () => _setAndReport(() => _ingredientIds.add(ing.id)),
                   ),
               ],
             ),
@@ -154,7 +169,7 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
                 StarRating(
                   rating: _minRating.toDouble(),
                   size: 32,
-                  onRate: (stars) => setState(() => _minRating = _minRating == stars ? 0 : stars),
+                  onRate: (stars) => _setAndReport(() => _minRating = _minRating == stars ? 0 : stars),
                 ),
                 const SizedBox(width: 12),
                 Text(_minRating == 0 ? 'Alle' : '$_minRating+ stjerner'),
@@ -169,13 +184,13 @@ class _RecipeFilterSheetState extends ConsumerState<_RecipeFilterSheet> {
                 ChoiceChip(
                   label: const Text('Alle'),
                   selected: _maxPrepMinutes == null,
-                  onSelected: (_) => setState(() => _maxPrepMinutes = null),
+                  onSelected: (_) => _setAndReport(() => _maxPrepMinutes = null),
                 ),
                 for (final minutes in _prepTimeOptions)
                   ChoiceChip(
                     label: Text('≤ $minutes min'),
                     selected: _maxPrepMinutes == minutes,
-                    onSelected: (_) => setState(() => _maxPrepMinutes = minutes),
+                    onSelected: (_) => _setAndReport(() => _maxPrepMinutes = minutes),
                   ),
               ],
             ),

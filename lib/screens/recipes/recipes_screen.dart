@@ -43,8 +43,11 @@ class _RecipesScreenState extends ConsumerState<RecipesScreen> with SingleTicker
   }
 
   Future<void> _openFilterSheet() async {
-    final result = await showRecipeFilterSheet(context, _filter);
-    if (result != null) setState(() => _filter = result);
+    await showRecipeFilterSheet(
+      context,
+      _filter,
+      onChanged: (filter) => setState(() => _filter = filter),
+    );
   }
 
   @override
