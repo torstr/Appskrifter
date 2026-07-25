@@ -102,7 +102,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
       allow update: if isHouseholdMember(householdId)
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['defaultServings', 'inviteCode', 'hiddenRecipeTypes']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['defaultServings', 'inviteCode', 'hiddenRecipeTypes', 'staples']);
       allow delete: if false;
 
       // Medlemskap opprettes enten av husholdningens oppretter (rett etter at

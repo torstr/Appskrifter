@@ -82,12 +82,15 @@ class ShoppingListService {
   /// som ikke er krysset av beholdes uendret
   /// (de er fortsatt relevante); manuelt tillagte varer som ER krysset av
   /// (dvs. kjøpt) fjernes, i likhet med alle oppskrift-avledede varer som
-  /// alltid bygges opp helt på nytt.
+  /// alltid bygges opp helt på nytt. Ingredienser i [staples] (husholdningens
+  /// standardvarer, f.eks. salt/pepper — antas alltid å være i hyllen)
+  /// utelates helt fra den genererte listen.
   Future<void> generateFromMealPlan(
     String householdId,
     List<MealPlanItem> mealPlanItems,
-    List<Recipe> recipesById,
-  ) async {
+    List<Recipe> recipesById, {
+    Set<String> staples = const {},
+  }) async {
     final recipeMap = {for (final r in recipesById) r.id: r};
 
     // key: "ingredientId|unitName" for ingredienser, "manual navn" håndteres separat.
@@ -96,6 +99,7 @@ class ShoppingListService {
       final recipe = recipeMap[mealItem.recipeId];
       if (recipe == null) continue;
       for (final ingredient in recipe.ingredients) {
+        if (staples.contains(ingredient.ingredientId)) continue;
         final key = '${ingredient.ingredientId}|${ingredient.unit.name}';
         final totalQuantity = ingredient.quantityPerUnit * mealItem.servings;
         final existing = aggregated[key];

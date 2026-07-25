@@ -109,6 +109,12 @@ en oppskrift heller skal være privat for en bestemt husholdning.
 - Måleenheter bøyes riktig i UI ut fra mengde (entall kun ved nøyaktig 1, ellers flertall for
   hele ord som «pakke»/«boks»/«pose»/«bunt»/«klype» — forkortede metriske enheter som g/kg/dl/ss
   bøyes ikke), se `Unit.displayNameFor()` i `lib/models/enums.dart`.
+- **Standardvarer** (Innstillinger → Standardvarer): en husholdning kan merke ingredienser fra
+  den sentrale listen (salt, pepper, olivenolje osv.) som alltid antatt å være i hyllen
+  (`households.staples`, liste med `ingredientId`). Slike ingredienser utelates helt fra
+  handlelisten som genereres fra middagsplanen, selv om en valgt middag bruker dem — se
+  `ShoppingListService.generateFromMealPlan`. Påvirker kun oppskrift-avledede varer, ikke manuelt
+  tillagte varer.
 
 ### Middagsplan → handleliste
 - Enkel liste-modell (v1): bruker huker av et sett middager fra globalt + eget sett, uten å
@@ -187,7 +193,9 @@ en oppskrift heller skal være privat for en bestemt husholdning.
   **Leseregler:** egen profil; medlemmer i samme husholdning; husholdningens oppretter kan lese
   profiler for ventende join-forespørsler. Ikke lesbar for andre innloggede brukere.
 - `households/{householdId}`: `name`, `inviteCode`, `createdBy`, `defaultServings`,
-  `hiddenRecipeTypes` (liste med `RecipeType`-navn skjult som standard i oppskriftslistene)
+  `hiddenRecipeTypes` (liste med `RecipeType`-navn skjult som standard i oppskriftslistene),
+  `staples` (liste med `ingredientId` — standardvarer som antas å alltid være i hyllen, se
+  «Ingredienser og kategorisering»)
 - `households/{householdId}/members/{uid}`: `joinedAt`, `memberUid` (redundant kopi av `{uid}`,
   brukt til å slå opp «hvilken husholdning er jeg allerede medlem av» via en
   `collectionGroup('members')`-spørring — se fallgruve om `FieldPath.documentId()` under; eldre

@@ -325,4 +325,13 @@ class HouseholdService {
       'hiddenRecipeTypes': types.map((t) => t.name).toList(),
     });
   }
+
+  /// Oppdaterer husholdningens sett med standardvarer (ingredienser som alltid
+  /// antas å være i hyllen, f.eks. salt/pepper) — utelates fra genererte
+  /// handlelister, se `ShoppingListService.generateFromMealPlan`.
+  Future<void> updateStaples(String householdId, Set<String> ingredientIds) async {
+    await _households.doc(householdId).update({
+      'staples': ingredientIds.toList(),
+    });
+  }
 }

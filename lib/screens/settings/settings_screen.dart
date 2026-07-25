@@ -10,6 +10,7 @@ import '../../providers/service_providers.dart';
 import '../../services/device_settings_service.dart';
 import '../../services/household_service.dart';
 import 'manual_item_history_screen.dart';
+import 'staples_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -176,6 +177,15 @@ class SettingsScreen extends ConsumerWidget {
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const ManualItemHistoryScreen()),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.kitchen_outlined),
+              title: const Text('Standardvarer'),
+              subtitle: const Text('Varer dere alltid har i hyllen (salt, pepper …) — utelates fra handlelisten.'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const StaplesScreen()),
               ),
             ),
             const Divider(),

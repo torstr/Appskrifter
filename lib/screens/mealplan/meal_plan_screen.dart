@@ -40,7 +40,12 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
     try {
       final recipeService = ref.read(recipeServiceProvider);
       final recipes = await recipeService.getRecipesByIds(items.map((e) => e.recipeId).toList());
-      await ref.read(shoppingListServiceProvider).generateFromMealPlan(household.id, items, recipes);
+      await ref.read(shoppingListServiceProvider).generateFromMealPlan(
+            household.id,
+            items,
+            recipes,
+            staples: household.staples,
+          );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Handlelisten er generert. Se fanen «Handleliste».')),

@@ -10,6 +10,7 @@ class Household {
     required this.createdBy,
     required this.defaultServings,
     required this.hiddenRecipeTypes,
+    required this.staples,
   });
 
   final String id;
@@ -24,6 +25,12 @@ class Household {
   /// husholdningen (f.eks. et skjema som aldri baker kan skjule «Bakst»).
   /// Man kan fortsatt eksplisitt filtrere fram en skjult type i filterarket.
   final Set<RecipeType> hiddenRecipeTypes;
+
+  /// Ingredienser (fra den sentrale ingredienslisten) husholdningen alltid
+  /// antas å ha i hyllen (salt, pepper, olivenolje osv.) — utelates derfor
+  /// fra genererte handlelister selv om en oppskrift bruker dem, se
+  /// `ShoppingListService.generateFromMealPlan`.
+  final Set<String> staples;
 
   /// Medlemskap ligger i underkolleksjonen `households/{id}/members`, se
   /// [HouseholdService.memberUidsStream] — ikke som et array-felt her, slik at
@@ -40,6 +47,7 @@ class Household {
       hiddenRecipeTypes: ((data['hiddenRecipeTypes'] as List<dynamic>?) ?? [])
           .map((e) => RecipeType.fromName(e as String?))
           .toSet(),
+      staples: ((data['staples'] as List<dynamic>?) ?? []).map((e) => e as String).toSet(),
     );
   }
 
@@ -50,6 +58,7 @@ class Household {
       'createdBy': createdBy,
       'defaultServings': defaultServings,
       'hiddenRecipeTypes': hiddenRecipeTypes.map((t) => t.name).toList(),
+      'staples': staples.toList(),
     };
   }
 }
