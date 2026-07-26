@@ -109,17 +109,40 @@ en oppskrift heller skal være privat for en bestemt husholdning.
 - Måleenheter bøyes riktig i UI ut fra mengde (entall kun ved nøyaktig 1, ellers flertall for
   hele ord som «pakke»/«boks»/«pose»/«bunt»/«klype» — forkortede metriske enheter som g/kg/dl/ss
   bøyes ikke), se `Unit.displayNameFor()` i `lib/models/enums.dart`.
-- **Standardvarer** (Innstillinger → Standardvarer): en husholdning kan merke ingredienser fra
-  den sentrale listen (salt, pepper, olivenolje osv.) som alltid antatt å være i hyllen
-  (`households.staples`, liste med `ingredientId`). Slike ingredienser utelates helt fra
-  handlelisten som genereres fra middagsplanen, selv om en valgt middag bruker dem — se
-  `ShoppingListService.generateFromMealPlan`. Påvirker kun oppskrift-avledede varer, ikke manuelt
-  tillagte varer.
+- **Standardvarer** (Innstillinger → Standardvarer): hver handleliste (se «Flere handlelister»
+  under) kan merke ingredienser fra den sentrale listen (salt, pepper, olivenolje osv.) som alltid
+  antatt å være i hyllen (`ShoppingList.staples`, liste med `ingredientId`). Slike ingredienser
+  utelates helt fra handlelisten som genereres fra den listens middagsplan, selv om en valgt
+  middag bruker dem — se `ShoppingListService.generateFromMealPlan`. Påvirker kun
+  oppskrift-avledede varer, ikke manuelt tillagte varer.
+
+### Flere handlelister
+- En husholdning kan ha **flere handlelister** (f.eks. «Hjemme» og «Hytta»), opprettet fra
+  Innstillinger → «Handlelister». Hver liste er en helt separat arbeidsflate med sin egen
+  middagsplan, handleliste, «standard antall personer» og egne standardvarer (se
+  `lib/models/shopping_list.dart`, `ShoppingListsService`). **Varehistorikk er unntaket** — den
+  forblir delt på husholdningsnivå på tvers av alle lister (se under), siden den bare er
+  navnebaserte autocomplete-forslag uten reell tilknytning til hvilken liste varen kom fra.
+- En husholdning har alltid **minst én** liste — nyopprettede husholdninger får automatisk én
+  («Hjemme») i `HouseholdService.createHousehold`, og den siste gjenværende listen kan ikke
+  slettes (`ShoppingListsService.deleteList`).
+- **Ingen synlig endring før man aktivt oppretter liste nr. 2**: så lenge husholdningen bare har
+  én liste, ser Middagsplan-/Handleliste-fanene akkurat ut som før funksjonen fantes — ingen
+  listevelger, ingen fargelegging. I det en husholdning oppretter liste nr. 2, dukker en
+  listevelger opp i AppBar på begge faner (`ListSwitcherTitle`), og bakgrunnen tones svakt med den
+  valgte listens farge (`currentListTintColor`, `lib/widgets/list_switcher_title.dart`).
+- **Hvilken liste man ser på er personlig og enhetslokalt** (`DeviceSettingsService.
+  getSelectedListId`/`setSelectedListId`, lagret med `shared_preferences` — samme mønster som
+  «Hold skjermen på»-tidsgrensen), ikke en delt husholdningsinnstilling. Ulike medlemmer kan derfor
+  jobbe med ulike lister samtidig (f.eks. én ser «Hjemme» mens en annen handler til «Hytta»).
+  `currentListProvider` (i `lib/providers/shopping_lists_providers.dart`) er spørringspunktet alle
+  skjermer bruker: enhetens lagrede valg hvis det fortsatt finnes, ellers den eldste listen.
 
 ### Middagsplan → handleliste
-- Enkel liste-modell (v1): bruker huker av et sett middager fra globalt + eget sett, uten å
-  binde dem til bestemte dager.
-- Antall personer: standardverdi settes i innstillinger, kan overstyres per valgt middag.
+- Enkel liste-modell (v1): bruker huker av et sett middager fra globalt + eget sett for **den
+  valgte handlelisten** (se «Flere handlelister» over), uten å binde dem til bestemte dager.
+- Antall personer: standardverdi settes i innstillinger (per handleliste), kan overstyres per
+  valgt middag.
 - Ingrediensmengder skaleres lineært med antall personer (mengde per person × antall personer).
   Ingen støtte for "faste" ikke-skalerbare mengder i v1.
 - **Person- vs. porsjon-oppskrifter**: bakeoppskrifter (brød, boller, kjeks) er typisk oppgitt for
@@ -178,7 +201,9 @@ en oppskrift heller skal være privat for en bestemt husholdning.
   eget oppskriftssett.
 
 ### Innstillinger
-- Standard antall personer å handle til.
+- **Handlelister**: opprett/rediger navn og farge/slett handlelister (se «Flere handlelister»),
+  og bytt hvilken som er aktiv på denne enheten.
+- Standard antall personer å handle til (for den aktive handlelisten).
 - Husholdningsnavn, invitasjonskode (kopier / regenerer).
 - **Medlemsliste**: navn, bilde og e-post for hvert medlem, med en «Oppretter»-etikett.
 - **Ventende forespørsler** (kun synlig for husholdningens oppretter): liste over de som har bedt
@@ -192,10 +217,8 @@ en oppskrift heller skal være privat for en bestemt husholdning.
   til en husholdning brukeren faktisk har et medlemskapsdokument i), `isAdmin` (kun satt manuelt).
   **Leseregler:** egen profil; medlemmer i samme husholdning; husholdningens oppretter kan lese
   profiler for ventende join-forespørsler. Ikke lesbar for andre innloggede brukere.
-- `households/{householdId}`: `name`, `inviteCode`, `createdBy`, `defaultServings`,
-  `hiddenRecipeTypes` (liste med `RecipeType`-navn skjult som standard i oppskriftslistene),
-  `staples` (liste med `ingredientId` — standardvarer som antas å alltid være i hyllen, se
-  «Ingredienser og kategorisering»)
+- `households/{householdId}`: `name`, `inviteCode`, `createdBy`,
+  `hiddenRecipeTypes` (liste med `RecipeType`-navn skjult som standard i oppskriftslistene)
 - `households/{householdId}/members/{uid}`: `joinedAt`, `memberUid` (redundant kopi av `{uid}`,
   brukt til å slå opp «hvilken husholdning er jeg allerede medlem av» via en
   `collectionGroup('members')`-spørring — se fallgruve om `FieldPath.documentId()` under; eldre
@@ -204,15 +227,19 @@ en oppskrift heller skal være privat for en bestemt husholdning.
   medlemmet selv (forlate).
 - `households/{householdId}/joinRequests/{uid}`: `requestedAt`, `joinCode` — ventende forespørsel
   om å bli med, opprettes av den som vil bli med, godkjennes/avvises av `createdBy`
-- `households/{householdId}/mealPlanItems/{itemId}`: `recipeId`, `recipeName`, `recipeUnit`
-  (øyeblikksbilde av oppskriftens `RecipeUnit`, samme mønster som `recipeName`), `servings`
-  (antall personer eller porsjoner, avhengig av `recipeUnit`)
-- `households/{householdId}/shoppingListItems/{itemId}`: `name`, `category`, `quantity`, `unit`,
-  `checked`, `manual`, `ingredientId`
+- `households/{householdId}/shoppingLists/{listId}`: `name`, `color` (`ListColor`-navn, se
+  `lib/models/enums.dart`), `defaultServings`, `staples` (liste med `ingredientId`), `createdAt`
+  (avgjør hvilken liste som er «standardlisten» ved fallback — se «Flere handlelister»)
+- `households/{householdId}/shoppingLists/{listId}/mealPlanItems/{itemId}`: `recipeId`,
+  `recipeName`, `recipeUnit` (øyeblikksbilde av oppskriftens `RecipeUnit`, samme mønster som
+  `recipeName`), `servings` (antall personer eller porsjoner, avhengig av `recipeUnit`)
+- `households/{householdId}/shoppingLists/{listId}/shoppingListItems/{itemId}`: `name`,
+  `category`, `quantity`, `unit`, `checked`, `manual`, `ingredientId`
 - `households/{householdId}/manualItemHistory/{itemId}`: `name`, `category`, `quantity`, `unit`
-  — husholdningens historikk over manuelt tillagte varer, brukt til autocomplete-forslag.
-  Dokument-id er en enkel slug av navnet (så samme vare oppdateres i stedet for å duplikeres).
-  Fjernes **aldri** automatisk, selv om varen senere fjernes fra selve handlelisten.
+  — husholdningens historikk over manuelt tillagte varer (delt på tvers av alle handlelister,
+  ikke per liste), brukt til autocomplete-forslag. Dokument-id er en enkel slug av navnet (så
+  samme vare oppdateres i stedet for å duplikeres). Fjernes **aldri** automatisk, selv om varen
+  senere fjernes fra selve handlelisten.
 - `inviteCodes/{code}`: `householdId`, `householdName` (denormalisert, for visning før man er
   medlem) — tynn oppslagstabell, dokument-id = selve koden
 - `ingredients/{ingredientId}`: `name`, `category` — sentral, delt liste
@@ -346,6 +373,15 @@ release-signerte APK-er.
 - **`Autocomplete`-widgeten krever `focusNode` og `textEditingController` sammen** — gir du den
   ene eksplisitt (for å eie kontrolleren selv, f.eks. for å forhåndsutfylle et felt), må du gi
   begge, ellers kaster widgeten en assertion ved førstegangs bruk.
+- **Unngå `FutureProvider` + `ref.invalidate()` for tilstand som må slå igjennom på tvers av
+  `HomeShell`s `IndexedStack`-faner** — Riverpod 3 «pauser» providere som kun observeres fra en
+  fane som ligger bak en annen (`TickerMode`-avslått), og en `invalidate()`-basert re-lesing fra
+  en async kilde (f.eks. `SharedPreferences`) kan da ikke garantert slå igjennom umiddelbart for
+  alle observatører. Løsningen for «hvilken handleliste er valgt» (se «Flere handlelister») er en
+  `Notifier<String?>` med synkron `state =`-oppdatering (øyeblikkelig for alle, uansett
+  pause-status) og persistering til enhetslagring som en bakgrunns-bieffekt — se
+  `SelectedListIdNotifier` i `lib/providers/shopping_lists_providers.dart`. Brukes samme mønster
+  senere for annen enhetslokal, faneuavhengig tilstand, ikke `FutureProvider`+`invalidate`.
 - Firestore-spørringer som kombinerer en `where`-likhet på ett felt med `orderBy`/likhet på et
   annet felt trenger en composite index (se `firestore.indexes.json`) — dukker opp som en
   kjøretidsfeil med en lenke til å opprette indeksen, første gang spørringen faktisk kjøres (ikke
@@ -401,6 +437,12 @@ release-signerte APK-er.
   dobbelt-medlemskap-sjekken, ikke selve medlemskapet), og en gammel vurdering uten `raterUid`
   vises ikke i «din vurdering»-merker/filter i oppskriftslistene før den vurderes på nytt. Ingen
   backfill er kjørt ennå.
+- **Urørte `defaultServings`/`staples`-felt på husholdningsdokumentet** for husholdninger som
+  fantes før «flere handlelister»-funksjonen (august 2026): engangsmigreringen som flyttet
+  `mealPlanItems`/`shoppingListItems` inn under en ny `shoppingLists/{listId}` (og kopierte
+  `defaultServings`/`staples` inn i den nye listen) lot de gamle feltene bli liggende ubrukt på
+  selve husholdningsdokumentet i stedet for å prøve å slette dem via Firestores REST-API — appen
+  leser dem aldri, men de er der i rå Firestore-data.
 
 ## Inkonsistenser (uløst)
 

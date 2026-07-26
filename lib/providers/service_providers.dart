@@ -7,6 +7,7 @@ import '../services/ingredient_service.dart';
 import '../services/meal_plan_service.dart';
 import '../services/recipe_service.dart';
 import '../services/shopping_list_service.dart';
+import '../services/shopping_lists_service.dart';
 
 final authServiceProvider = Provider((ref) => AuthService());
 final householdServiceProvider = Provider(
@@ -16,6 +17,7 @@ final ingredientServiceProvider = Provider((ref) => IngredientService());
 final recipeServiceProvider = Provider((ref) => RecipeService());
 final mealPlanServiceProvider = Provider((ref) => MealPlanService());
 final shoppingListServiceProvider = Provider((ref) => ShoppingListService());
+final shoppingListsServiceProvider = Provider((ref) => ShoppingListsService());
 final deviceSettingsServiceProvider = Provider((ref) => DeviceSettingsService());
 
 /// Antall minutter «hold skjermen på» skal vare før den automatisk slås av

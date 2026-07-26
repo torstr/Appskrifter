@@ -15,11 +15,16 @@ class ShoppingListService {
   /// Firestore batch-grense er 500 operasjoner.
   static const _maxBatchOps = 500;
 
-  CollectionReference<Map<String, dynamic>> _items(String householdId) => _firestore
+  CollectionReference<Map<String, dynamic>> _items(String householdId, String listId) => _firestore
       .collection('households')
       .doc(householdId)
+      .collection('shoppingLists')
+      .doc(listId)
       .collection('shoppingListItems');
 
+  /// Varehistorikken er delt på tvers av husholdningens handlelister (ikke
+  /// per liste) — den er kun forslag basert på varenavn, uavhengig av hvilken
+  /// liste varen opprinnelig ble lagt til fra.
   CollectionReference<Map<String, dynamic>> _history(String householdId) => _firestore
       .collection('households')
       .doc(householdId)
@@ -63,8 +68,8 @@ class ShoppingListService {
 
   /// Strømmer handlelisten sortert etter kategori
   /// (frukt/grønt → kjøtt → meieri → tørrvarer/sauser → annet), deretter navn.
-  Stream<List<ShoppingListItem>> shoppingListStream(String householdId) {
-    return _items(householdId).snapshots().map((snap) {
+  Stream<List<ShoppingListItem>> shoppingListStream(String householdId, String listId) {
+    return _items(householdId, listId).snapshots().map((snap) {
       final items = snap.docs.map(ShoppingListItem.fromFirestore).toList();
       items.sort((a, b) {
         final categoryCompare = a.category.index.compareTo(b.category.index);
@@ -75,18 +80,19 @@ class ShoppingListService {
     });
   }
 
-  /// Genererer handlelisten på nytt fra husholdningens middagsplan. Like
+  /// Genererer handlelisten på nytt fra listens middagsplan. Like
   /// ingredienser (samme ingrediens og enhet) slås sammen på tvers av valgte
   /// middager, og mengden skaleres lineært med antall personer (eller
   /// porsjoner, for bakeoppskrifter) for hver middag. Manuelt tillagte varer
   /// som ikke er krysset av beholdes uendret
   /// (de er fortsatt relevante); manuelt tillagte varer som ER krysset av
   /// (dvs. kjøpt) fjernes, i likhet med alle oppskrift-avledede varer som
-  /// alltid bygges opp helt på nytt. Ingredienser i [staples] (husholdningens
+  /// alltid bygges opp helt på nytt. Ingredienser i [staples] (listens
   /// standardvarer, f.eks. salt/pepper — antas alltid å være i hyllen)
   /// utelates helt fra den genererte listen.
   Future<void> generateFromMealPlan(
     String householdId,
+    String listId,
     List<MealPlanItem> mealPlanItems,
     List<Recipe> recipesById, {
     Set<String> staples = const {},
@@ -117,7 +123,7 @@ class ShoppingListService {
       }
     }
 
-    final existingSnap = await _items(householdId).get();
+    final existingSnap = await _items(householdId, listId).get();
 
     final toDelete = <DocumentReference<Map<String, dynamic>>>[];
     for (final doc in existingSnap.docs) {
@@ -141,7 +147,7 @@ class ShoppingListService {
         ingredientId: line.ingredientId,
       ),
     );
-    await _createInBatches(householdId, newItems);
+    await _createInBatches(householdId, listId, newItems);
   }
 
   Future<void> _deleteInBatches(List<DocumentReference<Map<String, dynamic>>> refs) async {
@@ -154,19 +160,20 @@ class ShoppingListService {
     }
   }
 
-  Future<void> _createInBatches(String householdId, Iterable<ShoppingListItem> items) async {
+  Future<void> _createInBatches(String householdId, String listId, Iterable<ShoppingListItem> items) async {
     final list = items.toList();
     for (var i = 0; i < list.length; i += _maxBatchOps) {
       final batch = _firestore.batch();
       for (final item in list.skip(i).take(_maxBatchOps)) {
-        batch.set(_items(householdId).doc(), item.toMap());
+        batch.set(_items(householdId, listId).doc(), item.toMap());
       }
       await batch.commit();
     }
   }
 
   Future<void> addManualItem(
-    String householdId, {
+    String householdId,
+    String listId, {
     required String name,
     required IngredientCategory category,
     double? quantity,
@@ -181,7 +188,7 @@ class ShoppingListService {
       checked: false,
       manual: true,
     );
-    await _items(householdId).add(item.toMap());
+    await _items(householdId, listId).add(item.toMap());
 
     final historyEntry = ManualItemHistoryEntry(
       name: name,
@@ -192,23 +199,23 @@ class ShoppingListService {
     await _history(householdId).doc(_historyKey(name)).set(historyEntry.toMap());
   }
 
-  Future<void> setChecked(String householdId, String itemId, bool checked) async {
-    await _items(householdId).doc(itemId).update({'checked': checked});
+  Future<void> setChecked(String householdId, String listId, String itemId, bool checked) async {
+    await _items(householdId, listId).doc(itemId).update({'checked': checked});
   }
 
-  Future<void> removeItem(String householdId, String itemId) async {
-    await _items(householdId).doc(itemId).delete();
+  Future<void> removeItem(String householdId, String listId, String itemId) async {
+    await _items(householdId, listId).doc(itemId).delete();
   }
 
-  Future<void> clearAll(String householdId) async {
-    final snap = await _items(householdId).get();
+  Future<void> clearAll(String householdId, String listId) async {
+    final snap = await _items(householdId, listId).get();
     await _deleteInBatches(snap.docs.map((d) => d.reference).toList());
   }
 
   /// Fjerner alle avkryssede varer (kjøpt), både oppskrift-avledede og
   /// manuelt tillagte — for å rydde opp i handlelisten uten å tømme alt.
-  Future<void> removeChecked(String householdId) async {
-    final snap = await _items(householdId).where('checked', isEqualTo: true).get();
+  Future<void> removeChecked(String householdId, String listId) async {
+    final snap = await _items(householdId, listId).where('checked', isEqualTo: true).get();
     await _deleteInBatches(snap.docs.map((d) => d.reference).toList());
   }
 
@@ -216,8 +223,8 @@ class ShoppingListService {
   /// manuelt tillagte varer. Brukt til å tømme rester av en tidligere
   /// generert handleliste når middagsplanen er tømt, uten en ny
   /// «Generer handleliste»-kjøring å bygge opp igjen fra.
-  Future<void> removeRecipeDerivedItems(String householdId) async {
-    final snap = await _items(householdId).where('manual', isEqualTo: false).get();
+  Future<void> removeRecipeDerivedItems(String householdId, String listId) async {
+    final snap = await _items(householdId, listId).where('manual', isEqualTo: false).get();
     await _deleteInBatches(snap.docs.map((d) => d.reference).toList());
   }
 }

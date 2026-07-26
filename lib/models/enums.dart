@@ -102,6 +102,29 @@ enum RecipeUnit {
   }
 }
 
+/// Fargen en handleliste er merket med, brukt til å skille flere handlelister
+/// visuelt fra hverandre (se `ShoppingList`). Selve fargeverdiene hører hjemme
+/// i UI-laget, ikke her — se `lib/widgets/list_color_swatch.dart`.
+enum ListColor {
+  gronn('Grønn'),
+  bla('Blå'),
+  oransje('Oransje'),
+  lilla('Lilla'),
+  rosa('Rosa'),
+  gul('Gul');
+
+  const ListColor(this.displayName);
+
+  final String displayName;
+
+  static ListColor fromName(String? name) {
+    return ListColor.values.firstWhere(
+      (c) => c.name == name,
+      orElse: () => ListColor.gronn,
+    );
+  }
+}
+
 /// Status på en oppskrift i livssyklusen fra privat til godkjent i fellesskapet.
 enum RecipeStatus {
   /// Kun synlig for husholdningen som eier den.

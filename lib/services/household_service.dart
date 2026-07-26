@@ -169,10 +169,21 @@ class HouseholdService {
           'name': trimmedName,
           'inviteCode': code,
           'createdBy': uid,
-          'defaultServings': 4,
         });
       } on FirebaseException catch (e) {
         throw HouseholdException('Kunne ikke opprette husholdningen (${e.code}).');
+      }
+      try {
+        // En husholdning har alltid minst én handleliste — se ShoppingList/ShoppingListsService.
+        await householdRef.collection('shoppingLists').add({
+          'name': 'Hjemme',
+          'color': ListColor.gronn.name,
+          'defaultServings': 4,
+          'staples': <String>[],
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } on FirebaseException catch (e) {
+        throw HouseholdException('Kunne ikke opprette standard handleliste (${e.code}).');
       }
       try {
         await _inviteCodes.doc(code).set({'householdId': householdRef.id, 'householdName': trimmedName});
@@ -316,22 +327,9 @@ class HouseholdService {
     }
   }
 
-  Future<void> updateDefaultServings(String householdId, int servings) async {
-    await _households.doc(householdId).update({'defaultServings': servings});
-  }
-
   Future<void> updateHiddenRecipeTypes(String householdId, Set<RecipeType> types) async {
     await _households.doc(householdId).update({
       'hiddenRecipeTypes': types.map((t) => t.name).toList(),
-    });
-  }
-
-  /// Oppdaterer husholdningens sett med standardvarer (ingredienser som alltid
-  /// antas å være i hyllen, f.eks. salt/pepper) — utelates fra genererte
-  /// handlelister, se `ShoppingListService.generateFromMealPlan`.
-  Future<void> updateStaples(String householdId, Set<String> ingredientIds) async {
-    await _households.doc(householdId).update({
-      'staples': ingredientIds.toList(),
     });
   }
 }

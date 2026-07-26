@@ -4,11 +4,13 @@ import '../models/manual_item_history_entry.dart';
 import '../models/shopping_list_item.dart';
 import 'auth_providers.dart';
 import 'service_providers.dart';
+import 'shopping_lists_providers.dart';
 
 final shoppingListProvider = StreamProvider<List<ShoppingListItem>>((ref) {
   final householdId = ref.watch(userProfileProvider).value?.householdId;
-  if (householdId == null) return Stream.value(const []);
-  return ref.watch(shoppingListServiceProvider).shoppingListStream(householdId);
+  final listId = ref.watch(currentListProvider)?.id;
+  if (householdId == null || listId == null) return Stream.value(const []);
+  return ref.watch(shoppingListServiceProvider).shoppingListStream(householdId, listId);
 });
 
 /// Husholdningens historikk over tidligere manuelt tillagte varer, brukt til

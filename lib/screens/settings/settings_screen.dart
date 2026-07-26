@@ -4,11 +4,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../models/enums.dart';
 import '../../models/household.dart';
+import '../../models/shopping_list.dart';
 import '../../models/user_profile.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/shopping_lists_providers.dart';
 import '../../services/device_settings_service.dart';
 import '../../services/household_service.dart';
+import '../../services/shopping_lists_service.dart';
+import '../../widgets/list_color_swatch.dart';
 import 'manual_item_history_screen.dart';
 import 'staples_screen.dart';
 
@@ -77,11 +81,17 @@ class SettingsScreen extends ConsumerWidget {
     }
   }
 
+  void _selectList(WidgetRef ref, String listId) {
+    ref.read(selectedListIdProvider.notifier).select(listId);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final household = ref.watch(currentHouseholdProvider).value;
     final profile = ref.watch(userProfileProvider).value;
     final isCreator = profile != null && household != null && household.createdBy == profile.uid;
+    final lists = ref.watch(shoppingListsProvider).value ?? const <ShoppingList>[];
+    final currentList = ref.watch(currentListProvider);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Innstillinger')),
@@ -122,14 +132,62 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text('Handlelister', style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            for (final list in lists)
+              ListTile(
+                leading: ListColorDot(color: list.color),
+                title: Text(list.name),
+                selected: currentList?.id == list.id,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (currentList?.id == list.id)
+                      const Icon(Icons.check, color: Colors.green)
+                    else
+                      const SizedBox(width: 24),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined),
+                      tooltip: 'Rediger liste',
+                      onPressed: () => showDialog(
+                        context: context,
+                        builder: (_) => _EditListDialog(
+                          householdId: household.id,
+                          list: list,
+                          canDelete: lists.length > 1,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                onTap: () => _selectList(ref, list.id),
+              ),
             ListTile(
-              title: const Text('Standard antall personer å handle til'),
-              subtitle: const Text('Brukes som forhåndsvalg når du legger en middag i planen.'),
-              trailing: _ServingsStepper(
-                value: household.defaultServings,
-                onChanged: (v) => ref.read(householdServiceProvider).updateDefaultServings(household.id, v),
+              leading: const Icon(Icons.add),
+              title: const Text('Ny liste'),
+              onTap: () => showDialog(
+                context: context,
+                builder: (_) => _CreateListDialog(householdId: household.id),
               ),
             ),
+            if (currentList != null)
+              ListTile(
+                title: const Text('Standard antall personer å handle til'),
+                subtitle: Text(
+                  lists.length > 1
+                      ? 'For «${currentList.name}». Brukes som forhåndsvalg når du legger en middag i planen.'
+                      : 'Brukes som forhåndsvalg når du legger en middag i planen.',
+                ),
+                trailing: _ServingsStepper(
+                  value: currentList.defaultServings,
+                  onChanged: (v) => ref
+                      .read(shoppingListsServiceProvider)
+                      .updateDefaultServings(household.id, currentList.id, v),
+                ),
+              ),
             const Divider(),
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
@@ -182,7 +240,11 @@ class SettingsScreen extends ConsumerWidget {
             ListTile(
               leading: const Icon(Icons.kitchen_outlined),
               title: const Text('Standardvarer'),
-              subtitle: const Text('Varer dere alltid har i hyllen (salt, pepper …) — utelates fra handlelisten.'),
+              subtitle: Text(
+                lists.length > 1
+                    ? 'Varer «${currentList?.name}» alltid har i hyllen (salt, pepper …) — utelates fra handlelisten.'
+                    : 'Varer dere alltid har i hyllen (salt, pepper …) — utelates fra handlelisten.',
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const StaplesScreen()),
@@ -339,6 +401,183 @@ class _ServingsStepper extends StatelessWidget {
         IconButton(icon: const Icon(Icons.remove_circle_outline), onPressed: value > 1 ? () => onChanged(value - 1) : null),
         Text('$value'),
         IconButton(icon: const Icon(Icons.add_circle_outline), onPressed: () => onChanged(value + 1)),
+      ],
+    );
+  }
+}
+
+/// Fargevalg gjenbrukt av opprett- og rediger-dialogen for handlelister.
+class _ColorPicker extends StatelessWidget {
+  const _ColorPicker({required this.selected, required this.onChanged});
+
+  final ListColor selected;
+  final ValueChanged<ListColor> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final color in ListColor.values)
+          ChoiceChip(
+            avatar: ListColorDot(color: color),
+            label: Text(color.displayName),
+            selected: selected == color,
+            onSelected: (_) => onChanged(color),
+          ),
+      ],
+    );
+  }
+}
+
+class _CreateListDialog extends ConsumerStatefulWidget {
+  const _CreateListDialog({required this.householdId});
+
+  final String householdId;
+
+  @override
+  ConsumerState<_CreateListDialog> createState() => _CreateListDialogState();
+}
+
+class _CreateListDialogState extends ConsumerState<_CreateListDialog> {
+  final _nameController = TextEditingController();
+  ListColor _color = ListColor.gronn;
+  bool _saving = false;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    setState(() => _saving = true);
+    try {
+      final listId = await ref
+          .read(shoppingListsServiceProvider)
+          .createList(widget.householdId, name: name, color: _color);
+      ref.read(selectedListIdProvider.notifier).select(listId);
+      if (mounted) Navigator.of(context).pop();
+    } on ShoppingListsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Ny handleliste'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Navn (f.eks. «Hytta»)', border: OutlineInputBorder()),
+            autofocus: true,
+          ),
+          const SizedBox(height: 16),
+          _ColorPicker(selected: _color, onChanged: (c) => setState(() => _color = c)),
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Avbryt')),
+        FilledButton(onPressed: _saving ? null : _create, child: const Text('Opprett')),
+      ],
+    );
+  }
+}
+
+class _EditListDialog extends ConsumerStatefulWidget {
+  const _EditListDialog({required this.householdId, required this.list, required this.canDelete});
+
+  final String householdId;
+  final ShoppingList list;
+  final bool canDelete;
+
+  @override
+  ConsumerState<_EditListDialog> createState() => _EditListDialogState();
+}
+
+class _EditListDialogState extends ConsumerState<_EditListDialog> {
+  late final _nameController = TextEditingController(text: widget.list.name);
+  late ListColor _color = widget.list.color;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    final service = ref.read(shoppingListsServiceProvider);
+    await service.renameList(widget.householdId, widget.list.id, name);
+    if (_color != widget.list.color) {
+      await service.updateColor(widget.householdId, widget.list.id, _color);
+    }
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Slette handlelisten?'),
+        content: Text(
+          '«${widget.list.name}» og hele middagsplanen/handlelisten dens blir slettet. Dette kan ikke angres.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Avbryt')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Slett')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    try {
+      await ref.read(shoppingListsServiceProvider).deleteList(widget.householdId, widget.list.id);
+      if (mounted) Navigator.of(context).pop();
+    } on ShoppingListsException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Rediger handleliste'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _nameController,
+            decoration: const InputDecoration(labelText: 'Navn', border: OutlineInputBorder()),
+            autofocus: true,
+          ),
+          const SizedBox(height: 16),
+          _ColorPicker(selected: _color, onChanged: (c) => setState(() => _color = c)),
+        ],
+      ),
+      actions: [
+        if (widget.canDelete)
+          TextButton(
+            onPressed: _delete,
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Slett'),
+          ),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Avbryt')),
+        FilledButton(onPressed: _save, child: const Text('Lagre')),
       ],
     );
   }

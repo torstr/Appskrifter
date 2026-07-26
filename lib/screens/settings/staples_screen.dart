@@ -5,8 +5,9 @@ import '../../models/ingredient.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/recipe_providers.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/shopping_lists_providers.dart';
 
-/// Administrasjon av husholdningens standardvarer: ingredienser som antas å
+/// Administrasjon av en handlelistes standardvarer: ingredienser som antas å
 /// alltid være i hyllen (salt, pepper, olivenolje osv.) og derfor utelates
 /// fra genererte handlelister, se `ShoppingListService.generateFromMealPlan`.
 class StaplesScreen extends ConsumerStatefulWidget {
@@ -25,24 +26,25 @@ class _StaplesScreenState extends ConsumerState<StaplesScreen> {
     super.dispose();
   }
 
-  void _toggle(String householdId, Set<String> current, String ingredientId, bool checked) {
+  void _toggle(String householdId, String listId, Set<String> current, String ingredientId, bool checked) {
     final updated = {...current};
     if (checked) {
       updated.add(ingredientId);
     } else {
       updated.remove(ingredientId);
     }
-    ref.read(householdServiceProvider).updateStaples(householdId, updated);
+    ref.read(shoppingListsServiceProvider).updateStaples(householdId, listId, updated);
   }
 
   @override
   Widget build(BuildContext context) {
-    final household = ref.watch(currentHouseholdProvider).value;
-    if (household == null) return const SizedBox.shrink();
+    final householdId = ref.watch(userProfileProvider).value?.householdId;
+    final list = ref.watch(currentListProvider);
+    if (householdId == null || list == null) return const SizedBox.shrink();
 
     final allIngredients = ref.watch(ingredientListProvider).value ?? const <Ingredient>[];
     final query = _searchController.text.trim().toLowerCase();
-    final staples = household.staples;
+    final staples = list.staples;
 
     final selected = allIngredients.where((i) => staples.contains(i.id)).toList()
       ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -74,7 +76,7 @@ class _StaplesScreenState extends ConsumerState<StaplesScreen> {
                     for (final ing in selected)
                       Chip(
                         label: Text(ing.name),
-                        onDeleted: () => _toggle(household.id, staples, ing.id, false),
+                        onDeleted: () => _toggle(householdId, list.id, staples, ing.id, false),
                       ),
                   ],
                 ),
@@ -103,7 +105,7 @@ class _StaplesScreenState extends ConsumerState<StaplesScreen> {
                   title: Text(ing.name),
                   subtitle: Text(ing.category.displayName),
                   value: false,
-                  onChanged: (checked) => _toggle(household.id, staples, ing.id, checked ?? false),
+                  onChanged: (checked) => _toggle(householdId, list.id, staples, ing.id, checked ?? false),
                 );
               },
             ),

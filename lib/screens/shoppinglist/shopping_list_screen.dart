@@ -7,13 +7,15 @@ import '../../models/shopping_list_item.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/recipe_providers.dart';
 import '../../providers/shopping_list_providers.dart';
+import '../../providers/shopping_lists_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../utils/quantity_formatter.dart';
+import '../../widgets/list_switcher_title.dart';
 
 class ShoppingListScreen extends ConsumerWidget {
   const ShoppingListScreen({super.key});
 
-  Future<void> _confirmClear(BuildContext context, WidgetRef ref, String householdId) async {
+  Future<void> _confirmClear(BuildContext context, WidgetRef ref, String householdId, String listId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -26,18 +28,18 @@ class ShoppingListScreen extends ConsumerWidget {
       ),
     );
     if (confirmed == true) {
-      await ref.read(shoppingListServiceProvider).clearAll(householdId);
+      await ref.read(shoppingListServiceProvider).clearAll(householdId, listId);
     }
   }
 
-  Future<void> _addManualItem(BuildContext context, WidgetRef ref, String householdId) async {
+  Future<void> _addManualItem(BuildContext context, WidgetRef ref, String householdId, String listId) async {
     await showDialog(
       context: context,
-      builder: (_) => _AddManualItemDialog(householdId: householdId),
+      builder: (_) => _AddManualItemDialog(householdId: householdId, listId: listId),
     );
   }
 
-  Future<void> _confirmRemoveChecked(BuildContext context, WidgetRef ref, String householdId) async {
+  Future<void> _confirmRemoveChecked(BuildContext context, WidgetRef ref, String householdId, String listId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -50,31 +52,34 @@ class ShoppingListScreen extends ConsumerWidget {
       ),
     );
     if (confirmed == true) {
-      await ref.read(shoppingListServiceProvider).removeChecked(householdId);
+      await ref.read(shoppingListServiceProvider).removeChecked(householdId, listId);
     }
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final householdId = ref.watch(userProfileProvider).value?.householdId;
+    final listId = ref.watch(currentListProvider)?.id;
     final itemsState = ref.watch(shoppingListProvider);
     final hasCheckedItems = itemsState.value?.any((item) => item.checked) ?? false;
+    final canOperate = householdId != null && listId != null;
 
     return Scaffold(
+      backgroundColor: currentListTintColor(ref),
       appBar: AppBar(
-        title: const Text('Handleliste'),
+        title: const ListSwitcherTitle(title: 'Handleliste'),
         actions: [
-          if (householdId != null && hasCheckedItems)
+          if (canOperate && hasCheckedItems)
             IconButton(
               icon: const Icon(Icons.remove_done),
               tooltip: 'Fjern avkryssede varer',
-              onPressed: () => _confirmRemoveChecked(context, ref, householdId),
+              onPressed: () => _confirmRemoveChecked(context, ref, householdId, listId),
             ),
-          if (householdId != null)
+          if (canOperate)
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined),
               tooltip: 'Tøm handleliste',
-              onPressed: () => _confirmClear(context, ref, householdId),
+              onPressed: () => _confirmClear(context, ref, householdId, listId),
             ),
         ],
       ),
@@ -93,14 +98,14 @@ class ShoppingListScreen extends ConsumerWidget {
               ),
             );
           }
-          return _GroupedList(items: items, householdId: householdId!);
+          return _GroupedList(items: items, householdId: householdId!, listId: listId!);
         },
       ),
-      floatingActionButton: householdId == null
+      floatingActionButton: !canOperate
           ? null
           : FloatingActionButton.extended(
               heroTag: 'shopping-list-fab',
-              onPressed: () => _addManualItem(context, ref, householdId),
+              onPressed: () => _addManualItem(context, ref, householdId, listId),
               icon: const Icon(Icons.add),
               label: const Text('Legg til vare'),
             ),
@@ -109,10 +114,11 @@ class ShoppingListScreen extends ConsumerWidget {
 }
 
 class _GroupedList extends ConsumerWidget {
-  const _GroupedList({required this.items, required this.householdId});
+  const _GroupedList({required this.items, required this.householdId, required this.listId});
 
   final List<ShoppingListItem> items;
   final String householdId;
+  final String listId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -137,7 +143,7 @@ class _GroupedList extends ConsumerWidget {
             ),
           ),
           for (final item in byCategory[category]!)
-            _ShoppingListTile(item: item, householdId: householdId),
+            _ShoppingListTile(item: item, householdId: householdId, listId: listId),
         ],
       ],
     );
@@ -145,10 +151,11 @@ class _GroupedList extends ConsumerWidget {
 }
 
 class _ShoppingListTile extends ConsumerWidget {
-  const _ShoppingListTile({required this.item, required this.householdId});
+  const _ShoppingListTile({required this.item, required this.householdId, required this.listId});
 
   final ShoppingListItem item;
   final String householdId;
+  final String listId;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -165,10 +172,10 @@ class _ShoppingListTile extends ConsumerWidget {
         padding: const EdgeInsets.only(right: 20),
         child: const Icon(Icons.delete_outline),
       ),
-      onDismissed: (_) => ref.read(shoppingListServiceProvider).removeItem(householdId, item.id),
+      onDismissed: (_) => ref.read(shoppingListServiceProvider).removeItem(householdId, listId, item.id),
       child: CheckboxListTile(
         value: item.checked,
-        onChanged: (checked) => ref.read(shoppingListServiceProvider).setChecked(householdId, item.id, checked ?? false),
+        onChanged: (checked) => ref.read(shoppingListServiceProvider).setChecked(householdId, listId, item.id, checked ?? false),
         controlAffinity: ListTileControlAffinity.leading,
         title: Text(
           item.name,
@@ -181,9 +188,10 @@ class _ShoppingListTile extends ConsumerWidget {
 }
 
 class _AddManualItemDialog extends ConsumerStatefulWidget {
-  const _AddManualItemDialog({required this.householdId});
+  const _AddManualItemDialog({required this.householdId, required this.listId});
 
   final String householdId;
+  final String listId;
 
   @override
   ConsumerState<_AddManualItemDialog> createState() => _AddManualItemDialogState();
@@ -213,6 +221,7 @@ class _AddManualItemDialogState extends ConsumerState<_AddManualItemDialog> {
     final quantity = double.tryParse(_quantityController.text.replaceAll(',', '.'));
     await ref.read(shoppingListServiceProvider).addManualItem(
           widget.householdId,
+          widget.listId,
           name: name,
           category: _category,
           quantity: quantity,

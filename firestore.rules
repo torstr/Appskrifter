@@ -102,7 +102,7 @@ service cloud.firestore {
       allow create: if isSignedIn() && request.resource.data.createdBy == request.auth.uid;
       allow update: if isHouseholdMember(householdId)
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['defaultServings', 'inviteCode', 'hiddenRecipeTypes', 'staples']);
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['inviteCode', 'hiddenRecipeTypes']);
       allow delete: if false;
 
       // Medlemskap opprettes enten av husholdningens oppretter (rett etter at
@@ -160,14 +160,23 @@ service cloud.firestore {
         );
       }
 
-      match /mealPlanItems/{itemId} {
+      // En husholdning har alltid minst én handleliste (se ShoppingListsService).
+      // Hver har sin egen middagsplan og sine egne handlelistevarer — samme
+      // åpenhet for medlemmer som før, bare ett nivå dypere.
+      match /shoppingLists/{listId} {
         allow read, write: if isHouseholdMember(householdId);
+
+        match /mealPlanItems/{itemId} {
+          allow read, write: if isHouseholdMember(householdId);
+        }
+
+        match /shoppingListItems/{itemId} {
+          allow read, write: if isHouseholdMember(householdId);
+        }
       }
 
-      match /shoppingListItems/{itemId} {
-        allow read, write: if isHouseholdMember(householdId);
-      }
-
+      // Varehistorikk (autocomplete-forslag for manuelt tillagte varer) er
+      // delt på tvers av husholdningens handlelister, ikke per liste.
       match /manualItemHistory/{itemId} {
         allow read, write: if isHouseholdMember(householdId);
       }

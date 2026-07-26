@@ -8,6 +8,8 @@ import '../../providers/auth_providers.dart';
 import '../../providers/meal_plan_providers.dart';
 import '../../providers/recipe_providers.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/shopping_lists_providers.dart';
+import '../../widgets/list_switcher_title.dart';
 import '../recipes/recipe_detail_screen.dart';
 
 class MealPlanScreen extends ConsumerStatefulWidget {
@@ -21,30 +23,33 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
   bool _generating = false;
 
   Future<void> _pickRecipe() async {
-    final household = ref.read(currentHouseholdProvider).value;
-    if (household == null) return;
+    final householdId = ref.read(userProfileProvider).value?.householdId;
+    final list = ref.read(currentListProvider);
+    if (householdId == null || list == null) return;
     final selected = await showModalBottomSheet<Recipe>(
       context: context,
       isScrollControlled: true,
       builder: (_) => const _RecipePickerSheet(),
     );
     if (selected == null) return;
-    final servings = selected.recipeUnit == RecipeUnit.porsjon ? 1 : household.defaultServings;
-    await ref.read(mealPlanServiceProvider).addRecipe(household.id, selected, servings);
+    final servings = selected.recipeUnit == RecipeUnit.porsjon ? 1 : list.defaultServings;
+    await ref.read(mealPlanServiceProvider).addRecipe(householdId, list.id, selected, servings);
   }
 
   Future<void> _generateShoppingList(List<MealPlanItem> items) async {
-    final household = ref.read(currentHouseholdProvider).value;
-    if (household == null || items.isEmpty) return;
+    final householdId = ref.read(userProfileProvider).value?.householdId;
+    final list = ref.read(currentListProvider);
+    if (householdId == null || list == null || items.isEmpty) return;
     setState(() => _generating = true);
     try {
       final recipeService = ref.read(recipeServiceProvider);
       final recipes = await recipeService.getRecipesByIds(items.map((e) => e.recipeId).toList());
       await ref.read(shoppingListServiceProvider).generateFromMealPlan(
-            household.id,
+            householdId,
+            list.id,
             items,
             recipes,
-            staples: household.staples,
+            staples: list.staples,
           );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -62,7 +67,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
     }
   }
 
-  Future<void> _confirmClearShoppingList(String householdId) async {
+  Future<void> _confirmClearShoppingList(String householdId, String listId) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -77,7 +82,7 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
       ),
     );
     if (confirmed == true) {
-      await ref.read(shoppingListServiceProvider).removeRecipeDerivedItems(householdId);
+      await ref.read(shoppingListServiceProvider).removeRecipeDerivedItems(householdId, listId);
     }
   }
 
@@ -85,9 +90,11 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
   Widget build(BuildContext context) {
     final mealPlanState = ref.watch(mealPlanProvider);
     final householdId = ref.watch(userProfileProvider).value?.householdId;
+    final listId = ref.watch(currentListProvider)?.id;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Middagsplan')),
+      backgroundColor: currentListTintColor(ref),
+      appBar: AppBar(title: const ListSwitcherTitle(title: 'Middagsplan')),
       body: mealPlanState.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, st) => Center(child: Text('Noe gikk galt: $e')),
@@ -103,12 +110,12 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
                       'Ingen middager valgt ennå. Trykk «Legg til middag» for å komme i gang.',
                       textAlign: TextAlign.center,
                     ),
-                    if (householdId != null) ...[
+                    if (householdId != null && listId != null) ...[
                       const SizedBox(height: 16),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.playlist_remove),
                         label: const Text('Tøm handleliste fra middagsplan'),
-                        onPressed: () => _confirmClearShoppingList(householdId),
+                        onPressed: () => _confirmClearShoppingList(householdId, listId),
                       ),
                     ],
                   ],
@@ -133,20 +140,20 @@ class _MealPlanScreenState extends ConsumerState<MealPlanScreen> {
                   children: [
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
-                      onPressed: item.servings > 1 && householdId != null
-                          ? () => ref.read(mealPlanServiceProvider).updateServings(householdId, item.id, item.servings - 1)
+                      onPressed: item.servings > 1 && householdId != null && listId != null
+                          ? () => ref.read(mealPlanServiceProvider).updateServings(householdId, listId, item.id, item.servings - 1)
                           : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline),
-                      onPressed: householdId != null
-                          ? () => ref.read(mealPlanServiceProvider).updateServings(householdId, item.id, item.servings + 1)
+                      onPressed: householdId != null && listId != null
+                          ? () => ref.read(mealPlanServiceProvider).updateServings(householdId, listId, item.id, item.servings + 1)
                           : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.delete_outline),
-                      onPressed: householdId != null
-                          ? () => ref.read(mealPlanServiceProvider).removeItem(householdId, item.id)
+                      onPressed: householdId != null && listId != null
+                          ? () => ref.read(mealPlanServiceProvider).removeItem(householdId, listId, item.id)
                           : null,
                     ),
                   ],

@@ -9,6 +9,7 @@ import '../../models/recipe.dart';
 import '../../providers/auth_providers.dart';
 import '../../providers/recipe_providers.dart';
 import '../../providers/service_providers.dart';
+import '../../providers/shopping_lists_providers.dart';
 import '../../services/device_settings_service.dart';
 import '../../utils/quantity_formatter.dart';
 import '../../widgets/star_rating.dart';
@@ -55,7 +56,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   Widget build(BuildContext context) {
     final recipeState = ref.watch(recipeByIdProvider(widget.recipeId));
     final profile = ref.watch(userProfileProvider).value;
-    final household = ref.watch(currentHouseholdProvider).value;
+    final list = ref.watch(currentListProvider);
     final wakeLockMinutes = ref.watch(wakeLockMinutesProvider).value ?? DeviceSettingsService.defaultWakeLockMinutes;
 
     return Scaffold(
@@ -69,8 +70,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
           if (_servings == null) {
             if (recipe.recipeUnit == RecipeUnit.porsjon) {
               _servings = 1;
-            } else if (household != null) {
-              _servings = household.defaultServings;
+            } else if (list != null) {
+              _servings = list.defaultServings;
             } else {
               return const Center(child: CircularProgressIndicator());
             }
@@ -190,7 +191,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
                     FilledButton.icon(
                       icon: const Icon(Icons.playlist_add),
                       label: const Text('Legg til i middagsplan'),
-                      onPressed: household == null ? null : () => _addToMealPlan(recipe, household.id),
+                      onPressed: (profile?.householdId == null || list == null)
+                          ? null
+                          : () => _addToMealPlan(recipe, profile!.householdId!, list.id),
                     ),
                     const SizedBox(height: 8),
                     CheckboxListTile(
@@ -216,13 +219,13 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     );
   }
 
-  Future<void> _addToMealPlan(Recipe recipe, String householdId) async {
+  Future<void> _addToMealPlan(Recipe recipe, String householdId, String listId) async {
     final servings = await showDialog<int>(
       context: context,
       builder: (context) => _ServingsDialog(unit: recipe.recipeUnit, initial: _servings ?? 1),
     );
     if (servings == null) return;
-    await ref.read(mealPlanServiceProvider).addRecipe(householdId, recipe, servings);
+    await ref.read(mealPlanServiceProvider).addRecipe(householdId, listId, recipe, servings);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('${recipe.name} er lagt til i middagsplanen.')),
